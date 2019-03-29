@@ -1,6 +1,6 @@
 # CC_RPPR.R
 
-download_json <- FALSE
+download_json <- TRUE
 source("~/Desktop/config.R")
 source("~/Desktop/helpers.R")
 
@@ -14,8 +14,8 @@ suppressMessages( library(readr) )
 # Header data
 fields_u3_hd_raw <-
   c(
-    'ptid'           # partic. ID
-    ,'form_date'     # visit date
+    "ptid"           # partic. ID
+    ,"form_date"     # visit date
   )
 # Form A1 Demographics
 fields_u3_a1_raw <-
@@ -102,24 +102,37 @@ rm(fields_u3_m1_raw)
 # Header data
 fields_ms_head_raw <- 
   c(
-    'subject_id'           # partic. ID
-    , 'exam_date'          # visit date
+    "subject_id"           # partic. ID
+    , "exam_date"          # visit date
   )
 # Demographic data
 fields_ms_dem_raw <-
   c(
     "race_value"           # demo
-    # , 'county'             # demo
-    # , 'zip_code'           # demo
+    # , "county"             # demo
+    # , "zip_code"           # demo
   )
 # Research data
 fields_ms_res_raw <-
   c(
-    # 'blood_drawn'          # research
-    'consent_to_autopsy' # research
-    # , 'mri_completed'      # research
-    # , 'sample_given'       # research
-    # , 'comp_withd'         # research
+    # "blood_drawn"          # research
+    "consent_to_autopsy" # research
+    # , "mri_completed"      # research
+    # , "sample_given"       # research
+    # , "comp_withd"         # research
+  )
+fields_ms_rvf_raw <- 
+  c(
+    "owndoc"
+    , "madc_website"
+    , "madcnewsletter"
+    , "alz_assoc"
+    , "radio_announc"
+    , "tv"
+    , "event"
+    , "health_fair"
+    , "other"
+    , "referred_ifother"
   )
 # Combine and collapse `fields_ms_*_raw` vectors
 fields_ms <- 
@@ -127,6 +140,7 @@ fields_ms <-
     fields_ms_head_raw
     , fields_ms_dem_raw
     , fields_ms_res_raw
+    , fields_ms_rvf_raw
   ) %>% paste(collapse = ",")
 rm(fields_ms_head_raw)
 rm(fields_ms_dem_raw)
@@ -145,16 +159,16 @@ if (download_json) {
     RCurl::postForm(
       uri     = REDCAP_API_URI,
       token   = REDCAP_API_TOKEN_UDS3n,
-      content = 'record',
-      format  = 'json',
-      type    = 'flat',
+      content = "record",
+      format  = "json",
+      type    = "flat",
       fields  = fields_u3,
-      rawOrLabel             = 'raw',
-      rawOrLabelHeaders      = 'raw',
-      exportCheckboxLabel    = 'false',
-      exportSurveyFields     = 'false',
-      exportDataAccessGroups = 'false',
-      returnFormat           = 'json',
+      rawOrLabel             = "raw",
+      rawOrLabelHeaders      = "raw",
+      exportCheckboxLabel    = "false",
+      exportSurveyFields     = "false",
+      exportDataAccessGroups = "false",
+      returnFormat           = "json",
       # .opts = list(ssl.verifypeer = TRUE, verbose = FALSE) # see note below*
       .opts = list(ssl.verifypeer = FALSE, verbose = FALSE)
     ) %>%
@@ -171,16 +185,16 @@ if (download_json) {
     RCurl::postForm(
       uri     = REDCAP_API_URI,
       token   = REDCAP_API_TOKEN_MINDSET,
-      content = 'record',
-      format  = 'json',
-      type    = 'flat',
+      content = "record",
+      format  = "json",
+      type    = "flat",
       fields  = fields_ms,
-      rawOrLabel             = 'label',
-      rawOrLabelHeaders      = 'raw',
-      exportCheckboxLabel    = 'false',
-      exportSurveyFields     = 'false',
-      exportDataAccessGroups = 'false',
-      returnFormat           = 'json',
+      rawOrLabel             = "label",
+      rawOrLabelHeaders      = "raw",
+      exportCheckboxLabel    = "false",
+      exportSurveyFields     = "false",
+      exportDataAccessGroups = "false",
+      returnFormat           = "json",
       filterLogic            = '([exam_date] >= "2017-03-28")',
       # .opts = list(ssl.verifypeer = TRUE, verbose = FALSE) # see note below*
       .opts = list(ssl.verifypeer = FALSE, verbose = FALSE)
@@ -376,6 +390,8 @@ df_u3_ms <- left_join(x = df_u3_cln_mut,
                       by = c("ptid" = "subject_id", 
                              "form_date" = "exam_date"))
 
+
+# Generate CC table for RPPR
 get_four_nums <- function(dx, df) {
   total <- df %>% 
     get_visit_n(ptid, form_date, Inf) %>% 
@@ -428,4 +444,88 @@ bind_rows(ummap_nums, colSums(ummap_nums[, 2:5]))
 
 readr::write_csv(bind_rows(ummap_nums, colSums(ummap_nums[, 2:5])),
                  "ummap_numbers.csv", na = "Total")
+
+
+# Generate OR Core table for RPPR
+write_csv(df_u3_ms, "df_u3_ms.csv", na = "")
+
+# "madc_website"
+# "madcnewsletter"
+# "alz_assoc"
+# "radio_announc"
+# "tv"
+# "event"
+# "health_fair"
+# "other"
+# "referred_ifother"
+
+ref_madc_website <- df_u3_ms %>% 
+  filter(!is.na(madc_website)) %>% 
+  nrow()
+ref_madcnewsletter <- df_u3_ms %>% 
+  filter(!is.na(madcnewsletter)) %>% 
+  nrow()
+
+ref_sources <- 
+  c(
+    "madc_website"
+    , "madcnewsletter"
+    , "alz_assoc"
+    , "radio_announc"
+    , "tv"
+    , "event"
+    , "health_fair"
+  )
+
+calc_ref_source_n <- function(ref_source, df) {
+  ref_source <- ensym(ref_source) # string to symbol
+  ref_source <- enquo(ref_source) # symbol to quosure
+  df %>% 
+    filter(!!ref_source == "Source") %>% 
+    nrow()
+}
+
+calc_ref_source_n("madc_website", df_u3_ms)
+calc_ref_source_n("madcnewsletter", df_u3_ms)
+
+purrr::map_int(ref_sources, calc_ref_source_n, df_u3_ms)
+
+# purrr::reduce(purrr::map_int(ref_sources, calc_ref_source_n, df_u3_ms), `+`)
+purrr::reduce(purrr::map_int(ref_sources, calc_ref_source_n, df_u3_ms), sum)
+
+df_u3_ms %>% 
+  select(madc_website, 
+         madcnewsletter, 
+         alz_assoc,
+         radio_announc,
+         tv,
+         event, 
+         health_fair, 
+         other, 
+         referred_ifother) %>% 
+  filter(is.na(madc_website)     &
+           is.na(madcnewsletter) &
+           is.na(alz_assoc)      &
+           is.na(radio_announc)  &
+           is.na(tv)             &
+           is.na(event)          &
+           is.na(health_fair)) %>%
+  filter(!is.na(other)) %>% 
+  group_by(referred_ifother) %>%
+  summarize(n = n()) %>% 
+  arrange(desc(n)) %>%
+  replace_na(list(referred_ifother = "[empty]")) %>%
+  write_csv(., "rvf_other_referral.csv", na = "")
+
+
+
+
+
+
+
+
+
+
+
+
 
